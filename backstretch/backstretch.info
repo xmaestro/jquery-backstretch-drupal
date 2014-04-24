@@ -1,0 +1,4 @@
+name = jQuery Backstretch
+description = A module for adding jQuery Backstretch Functionality to Drupal.
+core = 7.x
+scripts[] = lib/jquery.backstretch.js
