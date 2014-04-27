@@ -1,0 +1,346 @@
+<?php
+/**
+* Implements hook_help().
+*
+* Displays help and module information.
+*
+* @param path
+*   Which path of the site we're using to display help
+* @param arg
+*   Array that holds the current path as returned from arg() function
+*/
+function backstretch_help($path, $arg) {
+  switch ($path) {
+  	  //Path of current modules's help
+    case "admin/help#backstretch":
+      //Help text
+      
+      $help="A module for adding <a href='http://srobbin.com/jquery-plugins/backstretch/'>jQuery Backstretch</a> functionality to Drupal<br/><br/>";
+      $help.="<strong>To add Backstretch functionality to your site 'body' or any container likie a div with a '#id' or a '.class' when you have to add the images in the form of a URLs:</strong><br/><br/>";
+      $help.="<img style='width:100%' src='".base_path().drupal_get_path('module','backstretch')."/help/img/img1.png' /><br/><br/>";
+      $help.="<strong>To add Backstretch functionality to your site 'body' or any container likie a div with a '#id' or a '.class' with the images from ImageFields attached with content types:</strong><br/><br/>";
+      $help.="<img style='width:100%' src='".base_path().drupal_get_path('module','backstretch')."/help/img/img2.png' />";
+      return '<p>' . t($help) . '</p>';
+      break;
+  }
+}
+
+/**
+ * Admin form().
+ *
+ * Prepares the settings form.
+ *
+ */
+function backstretch_admin(){
+	$form=array();
+	
+	/* Admin settings form fields */
+	
+	$form['backstretch'] = array(
+			'#type' => 'fieldset',
+			'#title' => t('jQuery Backstretch Settings'),
+			'#collapsible' => TRUE
+			
+	);
+	
+	$form['backstretch']['backstretch_target']=array(
+			
+			'#type'=>'textfield',
+			'#title' => t('Target container'),
+			'#default_value' => variable_get('backstretch_target', "body"),
+			'#description' => t("Target container to apply jQuery Backstretch to."),
+			'#required' => TRUE
+			
+	);
+	
+	$form['backstretch']['backstretch_from_nodes']=array(
+	
+			'#type'=>'checkboxes',
+			'#title' => t(''),
+			'#default_value' => variable_get('backstretch_from_nodes',''),
+			'#options' => array('yes'=>t('Use node image fields?')),
+			'#required' => FALSE,
+			'#description' => t("Check this option if you want image fields attached to nodes as backstretch images instead of providing image URLs.")
+	
+	);
+	
+	$form['backstretch']['backstretch_node_types']=array(
+	
+			'#type'=>'checkboxes',
+			'#title' => t('Node Types'),
+			'#default_value' => variable_get('backstretch_node_types',''),
+			'#options' => backstretch_get_content_types(),
+			'#required' => FALSE,
+			'#description' => t("Select node types whose image fields should be used."),
+			//It's visibility depends upon "backstretch_from_nodes" checkbox
+			'#states' => array(
+					'invisible' => array(':checkbox[name="backstretch_from_nodes[yes]"]'=>array('checked'=>FALSE))
+					
+			)
+	
+	);
+	
+	$form['backstretch']['backstretch_images']=array(
+				
+			'#type'=>'textarea',
+			'#title' => t('Images'),
+			'#default_value' => variable_get('backstretch_images', ""),
+			'#description' => t("Commas seperated image URLs."),
+			'#required' => FALSE,
+			//It's visibility depends upon "backstretch_from_nodes" checkbox
+			'#states' => array('invisible' => array(':checkbox[name="backstretch_from_nodes[yes]"]' => array('checked'=>TRUE)))
+	);
+	
+	$form['backstretch']['backstretch_duration']=array(
+	
+			'#type'=>'textfield',
+			'#title' => t('Duration'),
+			'#default_value' => variable_get('backstretch_duration', 3000),
+			'#description' => t("Duration of the slide image."),
+			'#required' => TRUE
+	
+	);
+	
+	$form['backstretch']['backstretch_fade']=array(
+	
+			'#type'=>'textfield',
+			'#title' => t('Fade Speed'),
+			'#default_value' => variable_get('backstretch_fade', 750),
+			'#description' => t("Time it takes to fade in and out."),
+			'#required' => TRUE
+	
+	);
+	
+	$form['backstretch']['backstretch_on_pages']=array(
+			
+			'#type' => 'radios',
+			'#title' => t('Show on specific pages'),
+			'#default_value' => variable_get('backstretch_on_pages','0'),
+			'#options' => array('0'=>'All pages except those listed','1'=>'Only the listed pages'),
+			'#required' => FALSE
+			
+	);
+	
+	$form['backstretch']['backstretch_pages']=array(
+	
+			'#type'=>'textarea',
+			'#title' => t(''),
+			'#default_value' => variable_get('backstretch_pages', ""),
+			'#description' => t("Specify pages by using their paths. Seperate them by commas. Wildcards '*' are not currently supported. Use <front> for frontpage"),
+			'#required' => FALSE,
+			
+	);
+	
+	/* Admin settings form fields */
+	
+	//Making the form ready to render
+	return system_settings_form($form);
+	
+}
+
+/**
+ * Implements hook_menu().
+ *
+ * Hooks the module to the configurations panel.
+ */
+function backstretch_menu(){
+	
+	$items=array();
+	//Adding to menu
+	$items['admin/config/media/backstretch'] = array(
+			
+			'title' => 'jQuery Backstretch',
+			'description' => 'Settings for jQuery Backstretch',
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('backstretch_admin'),
+			'access arguments' => array('administer backstretch settings'),
+			'type' => MENU_NORMAL_ITEM,
+			
+	);
+	
+	return $items;
+	
+} 
+
+/**
+ * Implements hook_init().
+ *
+ * It's code is only used when BackStretch images are not used from content types.
+ *
+ */
+function backstretch_init(){
+	
+	//Do we have to get images from ImageFields in content types?
+	$backstretch_from_nodes=variable_get('backstretch_from_nodes');
+	
+	//If not
+	if($backstretch_from_nodes['yes']!=="yes"){
+	
+	if(!path_is_admin(current_path())){
+	//Get from images textarea in settings
+	$images=explode(',',trim(variable_get('backstretch_images')));
+	
+	$images_verified=array();
+	
+	foreach($images as $img){
+		
+		if(trim($img)!=""){ $images_verified[]=$img; }
+		
+	}
+	
+	$fade=trim(variable_get('backstretch_fade'));
+	
+	$target=trim(variable_get('backstretch_target'));
+	
+	$duration=trim(variable_get('backstretch_duration'));
+	//Render the background
+	backstretch_render_js($images_verified,$target,$duration,$fade);
+	
+	}
+	
+	}
+	
+}
+
+/**
+ * Implements hook_node_view().
+ *
+ * It's code is only used when the ImageFields are used as images elements.
+ *
+ * @param node
+ *   Current node
+ * @param view_mode
+ *   teaser,full... etc
+ * @param langcode
+ * 	 Current language code  
+ */
+function backstretch_node_view($node, $view_mode, $langcode){
+	//If it is a full node view
+	if($view_mode=="full"){
+	//Do we have to get images from ImageFields in content types?
+		$backstretch_from_nodes=variable_get('backstretch_from_nodes');
+		//If variable value is "yes"
+		if($backstretch_from_nodes["yes"]==="yes"){
+			//Get content types
+			$backstretch_node_types=variable_get('backstretch_node_types');
+			//If the current node type is in $backstretch_node_types
+			if(in_array($node->type,$backstretch_node_types,true)){
+				//Get field info about this contenm type. i.e. Which fields are attached
+				$field_info_instances=field_info_instances('node', $bundle_name = NULL);
+				
+				$images_verified=array();
+				
+				foreach($field_info_instances[$node->type] as $key=>$value){
+					//If it is image field and its not empty
+					if($value['widget']['type']=="image_image" && trim($node->{$key}['und'][0]['uri'])!=""){
+					
+					$images_verified[]=file_create_url($node->{$key}['und'][0]['uri']);
+					
+					}
+				}
+				
+				$fade=trim(variable_get('backstretch_fade'));
+				
+				$target=trim(variable_get('backstretch_target'));
+				
+				$duration=trim(variable_get('backstretch_duration'));
+				//Render the background
+				backstretch_render_js($images_verified,$target,$duration,$fade);
+				
+			}
+			
+		}
+		
+	} 
+	
+}
+
+/**
+ * Custom module function.
+ *
+ * Fetches the content type.
+ *
+ */
+function backstretch_get_content_types(){
+	//Getting current node types
+	$types=node_type_get_types();
+	
+	$return=array();
+	
+	foreach($types as $key=>$value){
+		
+		$return[$key]=t($value->name);
+		
+	}
+	
+	return $return;
+	
+}
+
+/**
+ * Custom module function.
+ *
+ * Renders inline js for the plugin.
+ *
+ * @param images_array
+ *   Array of images URLs
+ * @param target
+ *   Target HTML container for background
+ * @param duration
+ *   Effect duration
+ * @param fade
+ *   Fade effect duration
+ *   
+ */
+function backstretch_render_js($images_array=array(),$target,$duration,$fade){
+	
+	//To show on all pages or not?
+	$pages=explode(',',trim(variable_get('backstretch_pages')));
+	
+	//If pages are not provided there is no point moving with this construct
+	if($pages!=""){ 
+		
+		$pages_verified=array();
+		
+		foreach($pages as $page){
+		//Pages that are entered seperated by commas
+			if(trim($page)!=""){ $pages_verified[]=(trim($page)=="<front>")?"":$page; }
+		
+		}
+		//Getting current request path
+		$current_path=request_path();
+		//To show on pages
+		$on_pages=trim(variable_get('backstretch_on_pages'));
+		
+		switch($on_pages){
+			//If the selected option is 'All pages except those listed' return if the condition meets
+			case '0':
+				if(in_array($current_path, $pages_verified)){ return; }
+				break;
+			//If the selected option is ' Only the listed pages' return if the condition meets	
+			case '1':
+				if(!in_array($current_path, $pages_verified)){ return; }
+				break;
+			default:
+				break;
+		}
+		
+	}
+	
+	if(count($images_array)>0){
+	
+		if(count($images_array)==1){
+			//If there is one image in array	
+			drupal_add_js('jQuery(document).ready(function () { jQuery("'.$target.'").backstretch("'.$images_array[0].'"); });',
+			array('type' => 'inline', 'scope' => 'footer', 'weight' => 5));
+				
+		}else{
+			//If there are more than one image in array
+			drupal_add_js('jQuery(document).ready(function () { jQuery("'.$target.'").backstretch('.json_encode($images_array).', {duration: '.$duration.', fade: '.$fade.'}); });',
+			array('type' => 'inline', 'scope' => 'footer', 'weight' => 5));
+				
+		}
+	
+	}
+	
+}
